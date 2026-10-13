@@ -71,6 +71,19 @@ export type Product = {
   updated_at: string;
 }
 
+export type ProductPriceHistory = {
+  id: string;
+  business_id: string;
+  product_id: string;
+  price_type: "purchase" | "sale";
+  unit: string;
+  price: number;
+  supplier_id: string | null;
+  source_ref: string | null;
+  effective_at: string;
+  created_by: string | null;
+}
+
 export type ProductUnit = {
   id: string;
   business_id: string;
@@ -240,6 +253,7 @@ export type Database = {
       categories: TableShape<Category>;
       products: TableShape<Product>;
       product_units: TableShape<ProductUnit>;
+      product_price_history: TableShape<ProductPriceHistory>;
       unit_dimensions: TableShape<UnitDimension>;
       suppliers: TableShape<Supplier>;
       hawkers: TableShape<Hawker>;
@@ -349,6 +363,15 @@ export type Database = {
       total_payables: {
         Args: { p_business_id: string };
         Returns: number;
+      };
+      set_product_price: {
+        Args: {
+          p_product_id: string;
+          p_price_type: string;
+          p_unit: string;
+          p_price: number;
+        };
+        Returns: undefined;
       };
     };
     Enums: Record<string, never>;

@@ -6,51 +6,93 @@ export interface ProductRow {
   name: string;
   nameBn: string | null;
   sku: string;
+  barcode: string | null;
   baseUnit: string;
   purchaseUnit: string;
   sellUnit: string;
   minStock: number;
   isActive: boolean;
   categoryName: string | null;
+  purchasePrice: number | null;
+  salePrice: number | null;
+  stockQty: number;
 }
 
 export async function listProducts(businessId: string): Promise<ProductRow[]> {
   const supabase = await createClient();
-  const { data, error } = await supabase
-    .from("products")
-    .select(
-      "id, name, name_bn, sku, base_unit, purchase_unit, sell_unit, min_stock, is_active, category:categories(name)",
-    )
-    .eq("business_id", businessId)
-    .order("name", { ascending: true })
-    .returns<
-      Array<{
-        id: string;
-        name: string;
-        name_bn: string | null;
-        sku: string;
-        base_unit: string;
-        purchase_unit: string;
-        sell_unit: string;
-        min_stock: number;
-        is_active: boolean;
-        category: { name: string } | null;
-      }>
-    >();
+  const [products, prices, balances] = await Promise.all([
+    supabase
+      .from("products")
+      .select(
+        "id, name, name_bn, sku, barcode, base_unit, purchase_unit, sell_unit, min_stock, is_active, category:categories(name)",
+      )
+      .eq("business_id", businessId)
+      .order("name", { ascending: true })
+      .returns<
+        Array<{
+          id: string;
+          name: string;
+          name_bn: string | null;
+          sku: string;
+          barcode: string | null;
+          base_unit: string;
+          purchase_unit: string;
+          sell_unit: string;
+          min_stock: number;
+          is_active: boolean;
+          category: { name: string } | null;
+        }>
+      >(),
+    supabase
+      .from("product_price_history")
+      .select("product_id, price_type, price, effective_at")
+      .eq("business_id", businessId)
+      .order("effective_at", { ascending: false })
+      .returns<
+        Array<{
+          product_id: string;
+          price_type: "purchase" | "sale";
+          price: number;
+          effective_at: string;
+        }>
+      >(),
+    supabase
+      .from("inventory_balances")
+      .select("product_id, qty")
+      .eq("business_id", businessId)
+      .returns<Array<{ product_id: string; qty: number }>>(),
+  ]);
 
-  if (error) throw new Error(error.message);
+  if (products.error) throw new Error(products.error.message);
 
-  return (data ?? []).map((p) => ({
+  // Rows are ordered newest-first, so the first hit per (product, type) wins.
+  const salePrice = new Map<string, number>();
+  const purchasePrice = new Map<string, number>();
+  for (const row of prices.data ?? []) {
+    const map = row.price_type === "sale" ? salePrice : purchasePrice;
+    if (!map.has(row.product_id)) map.set(row.product_id, Number(row.price));
+  }
+
+  const stock = new Map<string, number>();
+  for (const b of balances.data ?? []) {
+    stock.set(b.product_id, Number(b.qty));
+  }
+
+  return (products.data ?? []).map((p) => ({
     id: p.id,
     name: p.name,
     nameBn: p.name_bn,
     sku: p.sku,
+    barcode: p.barcode,
     baseUnit: p.base_unit,
     purchaseUnit: p.purchase_unit,
     sellUnit: p.sell_unit,
     minStock: Number(p.min_stock),
     isActive: p.is_active,
     categoryName: p.category?.name ?? null,
+    salePrice: salePrice.get(p.id) ?? null,
+    purchasePrice: purchasePrice.get(p.id) ?? null,
+    stockQty: stock.get(p.id) ?? 0,
   }));
 }
 
