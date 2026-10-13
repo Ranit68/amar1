@@ -59,6 +59,8 @@ export interface RecentSale {
 export interface DashboardData {
   todaySales: number;
   todayProfit: number;
+  monthSales: number;
+  monthProfit: number;
   receivables: number;
   payables: number;
   lowStock: LowStockItem[];
@@ -66,45 +68,65 @@ export interface DashboardData {
   lowStockCount: number;
 }
 
+function firstOfMonth(): string {
+  return `${todayISO().slice(0, 7)}-01`;
+}
+
 export async function getDashboard(businessId: string): Promise<DashboardData> {
   const supabase = await createClient();
   const today = todayISO();
+  const monthStart = firstOfMonth();
 
-  const [salesToday, salesReturns, receivables, payables, balances, recent] = await Promise.all([
-    supabase
-      .from("sales_bills")
-      .select("total, gross_profit")
-      .eq("business_id", businessId)
-      .eq("invoice_date", today)
-      .eq("status", "approved")
-      .returns<SalesTodayRow[]>(),
-    supabase
-      .from("sales_returns")
-      .select("total, items")
-      .eq("business_id", businessId)
-      .eq("return_date", today)
-      .eq("status", "posted")
-      .returns<SalesReturnRow[]>(),
-    supabase.rpc("total_receivables", { p_business_id: businessId }),
-    supabase.rpc("total_payables", { p_business_id: businessId }),
-    supabase
-      .from("inventory_balances")
-      .select(
-        "product_id, qty, avg_cost, product:products(name, name_bn, base_unit, min_stock)",
-      )
-      .eq("business_id", businessId)
-      .returns<LowStockRow[]>(),
-    supabase
-      .from("sales_bills")
-      .select(
-        "id, invoice_number, invoice_date, total, outstanding, payment_status, hawker:hawkers(name)",
-      )
-      .eq("business_id", businessId)
-      .eq("status", "approved")
-      .order("created_at", { ascending: false })
-      .limit(8)
-      .returns<RecentSaleRow[]>(),
-  ]);
+  const [salesToday, salesReturns, monthSalesRes, monthReturnsRes, receivables, payables, balances, recent] =
+    await Promise.all([
+      supabase
+        .from("sales_bills")
+        .select("total, gross_profit")
+        .eq("business_id", businessId)
+        .eq("invoice_date", today)
+        .eq("status", "approved")
+        .returns<SalesTodayRow[]>(),
+      supabase
+        .from("sales_returns")
+        .select("total, items")
+        .eq("business_id", businessId)
+        .eq("return_date", today)
+        .eq("status", "posted")
+        .returns<SalesReturnRow[]>(),
+      supabase
+        .from("sales_bills")
+        .select("total, gross_profit")
+        .eq("business_id", businessId)
+        .eq("status", "approved")
+        .gte("invoice_date", monthStart)
+        .returns<SalesTodayRow[]>(),
+      supabase
+        .from("sales_returns")
+        .select("total, items")
+        .eq("business_id", businessId)
+        .eq("status", "posted")
+        .gte("return_date", monthStart)
+        .returns<SalesReturnRow[]>(),
+      supabase.rpc("total_receivables", { p_business_id: businessId }),
+      supabase.rpc("total_payables", { p_business_id: businessId }),
+      supabase
+        .from("inventory_balances")
+        .select(
+          "product_id, qty, avg_cost, product:products(name, name_bn, base_unit, min_stock)",
+        )
+        .eq("business_id", businessId)
+        .returns<LowStockRow[]>(),
+      supabase
+        .from("sales_bills")
+        .select(
+          "id, invoice_number, invoice_date, total, outstanding, payment_status, hawker:hawkers(name)",
+        )
+        .eq("business_id", businessId)
+        .eq("status", "approved")
+        .order("created_at", { ascending: false })
+        .limit(8)
+        .returns<RecentSaleRow[]>(),
+    ]);
 
   const sum = (rows: { total?: number; outstanding?: number; gross_profit?: number }[], key: "total" | "outstanding" | "gross_profit") =>
     rows.reduce((acc, r) => acc + Number(r[key] ?? 0), 0);
@@ -121,22 +143,32 @@ export async function getDashboard(businessId: string): Promise<DashboardData> {
     }))
     .sort((a, b) => a.qty - b.qty);
 
+  const returnsCostOf = (rows: SalesReturnRow[]) =>
+    rows.reduce(
+      (acc, r) =>
+        acc +
+        (r.items ?? []).reduce(
+          (lineAcc, it) => lineAcc + Number(it.qty_base ?? 0) * Number(it.unit_cost ?? 0),
+          0,
+        ),
+      0,
+    );
+
   const grossSales = sum(salesToday.data ?? [], "total");
   const grossProfit = sum(salesToday.data ?? [], "gross_profit");
   const returnsTotal = sum(salesReturns.data ?? [], "total");
-  const returnsCost = (salesReturns.data ?? []).reduce(
-    (acc, r) =>
-      acc +
-      (r.items ?? []).reduce(
-        (lineAcc, it) => lineAcc + Number(it.qty_base ?? 0) * Number(it.unit_cost ?? 0),
-        0,
-      ),
-    0,
-  );
+  const returnsCost = returnsCostOf(salesReturns.data ?? []);
+
+  const monthGrossSales = sum(monthSalesRes.data ?? [], "total");
+  const monthGrossProfit = sum(monthSalesRes.data ?? [], "gross_profit");
+  const monthReturnsTotal = sum(monthReturnsRes.data ?? [], "total");
+  const monthReturnsCost = returnsCostOf(monthReturnsRes.data ?? []);
 
   return {
     todaySales: grossSales - returnsTotal,
     todayProfit: grossProfit - (returnsTotal - returnsCost),
+    monthSales: monthGrossSales - monthReturnsTotal,
+    monthProfit: monthGrossProfit - (monthReturnsTotal - monthReturnsCost),
     receivables: Number(receivables.data ?? 0),
     payables: Number(payables.data ?? 0),
     lowStock: lowStockAll.slice(0, 8),

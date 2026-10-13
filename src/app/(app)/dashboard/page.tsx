@@ -44,12 +44,24 @@ export default async function DashboardPage() {
         }
       />
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
         <StatCard
           label="আজকের বিক্রয়"
           value={formatMoney(data.todaySales)}
-          hint={`মুনাফা ${formatMoney(data.todayProfit)}`}
+          hint="আজকের মোট বিক্রয়"
           tone="brand"
+        />
+        <StatCard
+          label="আজকের মুনাফা"
+          value={formatMoney(data.todayProfit)}
+          hint="আজকের বিক্রয় থেকে লাভ"
+          tone="green"
+        />
+        <StatCard
+          label="এই মাসের মুনাফা"
+          value={formatMoney(data.monthProfit)}
+          hint={`মাসিক বিক্রয় ${formatMoney(data.monthSales)}`}
+          tone="green"
         />
         <StatCard
           label="পাওনা (বাকি)"

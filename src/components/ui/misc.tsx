@@ -30,13 +30,14 @@ export function StatCard({
   label: string;
   value: string;
   hint?: string;
-  tone?: "brand" | "amber" | "red" | "blue";
+  tone?: "brand" | "amber" | "red" | "blue" | "green";
 }) {
   const toneMap = {
     brand: "text-brand-700",
     amber: "text-amber-600",
     red: "text-red-600",
     blue: "text-blue-600",
+    green: "text-green-600",
   } as const;
   return (
     <div className="rounded-xl border border-ink-200 bg-white p-4 shadow-sm">
