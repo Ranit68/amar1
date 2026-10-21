@@ -101,6 +101,6 @@ export async function postPaymentAction(
   const allocatedText = Number(result.allocated ?? 0).toFixed(2);
   return {
     ok: true,
-    message: `${methodLabel} সংরক্ষিত: ৳${amountText} (বিলে বরাদ্দ ৳${allocatedText})`,
+    message: `${methodLabel} সংরক্ষিত: ${amountText} (বিলে বরাদ্দ ${allocatedText})`,
   };
 }

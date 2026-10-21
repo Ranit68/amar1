@@ -55,6 +55,56 @@ function normalize(s: string): string {
     .trim();
 }
 
+/** Longest edge sent to the server. Bigger images make OCR take minutes. */
+const MAX_EDGE = 1600;
+const JPEG_QUALITY = 0.82;
+
+/**
+ * Downscales the photo in the browser before uploading. A 12MP phone photo is
+ * ~9MB and needs ~90s of OCR; at 1600px it is ~300KB and needs ~2s.
+ */
+async function compressImage(file: File): Promise<{ blob: Blob; bytes: number }> {
+  const originalBytes = file.size;
+  if (!file.type.startsWith("image/") || file.type === "image/gif") {
+    return { blob: file, bytes: originalBytes };
+  }
+
+  try {
+    const bitmap = await createImageBitmap(file, { imageOrientation: "from-image" });
+    const scale = Math.min(1, MAX_EDGE / Math.max(bitmap.width, bitmap.height));
+    const width = Math.max(1, Math.round(bitmap.width * scale));
+    const height = Math.max(1, Math.round(bitmap.height * scale));
+
+    const canvas = document.createElement("canvas");
+    canvas.width = width;
+    canvas.height = height;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) {
+      bitmap.close();
+      return { blob: file, bytes: originalBytes };
+    }
+    // Bills are on white paper - keep the background white for transparent PNGs.
+    ctx.fillStyle = "#ffffff";
+    ctx.fillRect(0, 0, width, height);
+    ctx.drawImage(bitmap, 0, 0, width, height);
+    bitmap.close();
+
+    const blob = await new Promise<Blob | null>((resolve) =>
+      canvas.toBlob(resolve, "image/jpeg", JPEG_QUALITY),
+    );
+    if (!blob) return { blob: file, bytes: originalBytes };
+    return { blob, bytes: blob.size };
+  } catch {
+    return { blob: file, bytes: originalBytes };
+  }
+}
+
+function formatBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
 function unitsFor(p: ProductLite, mode: "sales" | "purchases"): string[] {
   const all = [p.baseUnit, mode === "purchases" ? p.purchaseUnit : p.sellUnit];
   return Array.from(new Set(all.filter(Boolean)));
@@ -105,6 +155,7 @@ export function ScanUploader({
   const [result, setResult] = useState<OcrResult | null>(null);
   const [rows, setRows] = useState<Row[]>([]);
   const [mode, setMode] = useState<"sales" | "purchases">("sales");
+  const [uploadInfo, setUploadInfo] = useState<string | null>(null);
   const [state, formAction, pending] = useActionState(action, INITIAL);
 
   async function onSubmit(e: FormEvent<HTMLFormElement>) {
@@ -115,11 +166,46 @@ export function ScanUploader({
 
     setBusy(true);
     setResult(null);
+    setUploadInfo(null);
     try {
+      const original = input.files[0];
+      const { blob, bytes } = await compressImage(original);
+      setUploadInfo(
+        `ছবি ছোট করে পাঠানো হয়েছে: ${formatBytes(original.size)} → ${formatBytes(bytes)}`,
+      );
+
       const body = new FormData();
-      body.append("file", input.files[0]);
+      body.append("file", blob, "bill.jpg");
       const res = await fetch("/api/ocr", { method: "POST", body });
-      const json = (await res.json()) as OcrResult;
+
+      // The server may answer with HTML (proxy error page, host timeout).
+      // Read the body as text first so a non-JSON reply is still reportable.
+      const raw = await res.text();
+      let json: OcrResult | null = null;
+      try {
+        json = JSON.parse(raw) as OcrResult;
+      } catch {
+        json = null;
+      }
+
+      if (!res.ok) {
+        setResult({
+          status: "error",
+          message:
+            json?.message ??
+            `সার্ভার ত্রুটি (${res.status} ${res.statusText}). আবার চেষ্টা করুন।`,
+        });
+        return;
+      }
+
+      if (!json) {
+        setResult({
+          status: "error",
+          message: `সার্ভার থেকে ঠিক উত্তর আসেনি (${res.status})। আবার চেষ্টা করুন।`,
+        });
+        return;
+      }
+
       setResult(json);
       if (json.status === "ok" && json.lines) {
         setRows(
@@ -137,7 +223,10 @@ export function ScanUploader({
         );
       }
     } catch {
-      setResult({ status: "error", message: "সার্ভারে পাঠানো যায়নি।" });
+      setResult({
+        status: "error",
+        message: "সার্ভারে পাঠানো যায়নি। ইন্টারনেট সংযোগ দেখে আবার চেষ্টা করুন।",
+      });
     } finally {
       setBusy(false);
     }
@@ -201,6 +290,9 @@ export function ScanUploader({
             <p className="mt-3 text-xs text-ink-400">
               বাংলা + ইংরেজি OCR (tesseract.js)। সঠিক ফলাফলের জন্য ভালো আলোয় ছবি তুলুন।
             </p>
+            {uploadInfo ? (
+              <p className="mt-2 text-xs text-ink-500">{uploadInfo}</p>
+            ) : null}
           </CardContent>
         </Card>
 

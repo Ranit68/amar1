@@ -29,7 +29,7 @@ export function TrendChart({ data }: { data: TrendPoint[] }) {
             width={64}
             tickFormatter={(v: number) => BDT.format(v)}
           />
-          <Tooltip formatter={(value) => `৳ ${BDT.format(Number(value))}`} />
+          <Tooltip formatter={(value) => BDT.format(Number(value))} />
           <Legend />
           <Bar dataKey="sales" name="বিক্রয়" fill="#10b981" radius={[4, 4, 0, 0]} maxBarSize={36} />
           <Bar dataKey="purchases" name="ক্রয়" fill="#f59e0b" radius={[4, 4, 0, 0]} maxBarSize={36} />

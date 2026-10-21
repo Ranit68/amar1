@@ -56,10 +56,10 @@ export async function confirmClosingAction(
       : Number(result.difference);
   const message =
     difference === null
-      ? `হিসাব সংরক্ষিত। প্রত্যাশিত নগদ ৳${expected.toFixed(2)}`
+      ? `হিসাব সংরক্ষিত। প্রত্যাশিত নগদ ${expected.toFixed(2)}`
       : difference === 0
         ? "হিসাব মিলে গেছে। প্রত্যাশিত ও গণনা করা নগদ সমান।"
-        : `পার্থক্য ৳${difference.toFixed(2)} (গণনা করা − প্রত্যাশিত)।`;
+        : `পার্থক্য ${difference.toFixed(2)} (গণনা করা − প্রত্যাশিত)।`;
 
   return { ok: true, message };
 }

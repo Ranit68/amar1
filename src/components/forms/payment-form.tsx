@@ -135,7 +135,7 @@ export function PaymentForm({
         </Select>
       </Field>
 
-      <Field label="টাকার অঙ্ক / Amount" htmlFor="amount" hint={allocSum > 0 ? `বিলে বরাদ্দ: ৳${allocSum.toFixed(2)}` : undefined}>
+      <Field label="টাকার অঙ্ক / Amount" htmlFor="amount" hint={allocSum > 0 ? `বিলে বরাদ্দ: ${allocSum.toFixed(2)}` : undefined}>
         <Input
           id="amount"
           name="amount"
@@ -218,7 +218,7 @@ export function PaymentForm({
                     }
                   />
                   <span className="flex-1 text-ink-700">
-                    {b.invoiceNumber ?? "বিল"} · <span className="text-ink-500">বাকি ৳{b.outstanding.toFixed(2)}</span>
+                    {b.invoiceNumber ?? "বিল"} · <span className="text-ink-500">বাকি {b.outstanding.toFixed(2)}</span>
                   </span>
                   <Input
                     type="number"
